@@ -86,19 +86,16 @@ flowchart TB
 
 | Screenshot | What it should show |
 |---|---|
-| `dashboard.png` | Upload flow + dataset list |
-| `eda-explorer.png` | Numeric/categorical column stats, histograms |
-| `correlation-matrix.png` | Correlation heatmap |
-| `ai-snapshot.png` | AI Snapshot page with the Gemini/rule-based source badge visible |
-| `ai-snapshot-processing.png` | The "processing" state mid-poll, to show the async job UX |
+| `dashboard.png` | <img width="1440" height="812" alt="Datacanvas" src="https://github.com/user-attachments/assets/8ea872d3-b32e-482e-aacf-bcad14719fd9" />
 
-## Demo
 
-*(Add a live deployment link and/or a 30–60s screen recording here — a
-Loom or GIF showing: upload → EDA populates → AI Snapshot goes from
-"processing" to a completed result with the source badge visible is the
-single most effective demo, since it makes the async-job design visible
-rather than just described.)*
+
+
+t |
+| `eda-explorer.png` |<img width="1440" height="809" alt="Screenshot 2026-07-12 at 14 55 49" src="https://github.com/user-attachments/assets/ade2ad00-7b56-4a64-a8fe-b8634abcb8ae" /> |
+| `correlation-matrix.png` | <img width="1437" height="789" alt="Screenshot 2026-07-12 at 14 56 22" src="https://github.com/user-attachments/assets/fe60f364-e2af-4164-a9f3-34676835c28e" /> |
+| `ai-snapshot.png` | <img width="1440" height="814" alt="Screenshot 2026-07-12 at 14 56 42" src="https://github.com/user-attachments/assets/22598d96-aeec-45f8-8c57-d2dd424973f8" /> |
+
 
 ---
 
