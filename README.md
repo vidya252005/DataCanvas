@@ -89,7 +89,7 @@ flowchart TB
 | `dashboard.png` | Upload flow + dataset list |
 | `eda-explorer.png` | Numeric/categorical column stats, histograms |
 | `correlation-matrix.png` | Correlation heatmap |
-| `ai-snapshot.png` | AI Snapshot page with the Grok/rule-based source badge visible |
+| `ai-snapshot.png` | AI Snapshot page with the Gemini/rule-based source badge visible |
 | `ai-snapshot-processing.png` | The "processing" state mid-poll, to show the async job UX |
 
 ## Demo
