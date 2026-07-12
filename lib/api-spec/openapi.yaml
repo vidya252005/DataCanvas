@@ -1,0 +1,848 @@
+openapi: 3.1.0
+info:
+  title: Api
+  version: 0.1.0
+  description: DataCanvas Analytics Platform API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: datasets
+    description: Dataset management
+  - name: analysis
+    description: EDA and statistical analysis
+  - name: export
+    description: Export capabilities
+  - name: ai
+    description: AI-powered insights
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /datasets:
+    get:
+      operationId: listDatasets
+      tags: [datasets]
+      summary: List all uploaded datasets
+      responses:
+        "200":
+          description: List of datasets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Dataset"
+    post:
+      operationId: uploadDataset
+      tags: [datasets]
+      summary: Upload a CSV or Excel file
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/DatasetUpload"
+      responses:
+        "201":
+          description: Dataset uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dataset"
+
+  /datasets/{id}:
+    get:
+      operationId: getDataset
+      tags: [datasets]
+      summary: Get a specific dataset with preview rows
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dataset detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetDetail"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteDataset
+      tags: [datasets]
+      summary: Delete a dataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+
+  /datasets/{id}/eda:
+    get:
+      operationId: getEda
+      tags: [analysis]
+      summary: Full exploratory data analysis for a dataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: EDA results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EdaResult"
+
+  /datasets/{id}/columns/{column}:
+    get:
+      operationId: getColumnAnalysis
+      tags: [analysis]
+      summary: Deep analysis of a single column
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: column
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Column analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ColumnAnalysis"
+
+  /datasets/{id}/correlation:
+    get:
+      operationId: getCorrelation
+      tags: [analysis]
+      summary: Correlation matrix for numeric columns
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Correlation data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CorrelationResult"
+
+  /datasets/{id}/outliers:
+    get:
+      operationId: getOutliers
+      tags: [analysis]
+      summary: Outlier detection across numeric columns
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Outlier results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OutlierResult"
+
+  /datasets/{id}/ai-snapshot:
+    post:
+      operationId: getAiSnapshot
+      tags: [ai]
+      summary: AI-powered comprehensive analysis and insights
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiSnapshotRequest"
+      responses:
+        "200":
+          description: AI insights
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSnapshot"
+
+  /datasets/{id}/export/report:
+    post:
+      operationId: exportReport
+      tags: [export]
+      summary: Export as a formatted markdown/HTML report
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportOptions"
+      responses:
+        "200":
+          description: Report content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExportResult"
+
+  /datasets/{id}/export/pdf:
+    post:
+      operationId: exportPdf
+      tags: [export]
+      summary: Export analysis as PDF
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportOptions"
+      responses:
+        "200":
+          description: PDF file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /datasets/{id}/export/pptx:
+    post:
+      operationId: exportPptx
+      tags: [export]
+      summary: Export analysis as PowerPoint presentation
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportOptions"
+      responses:
+        "200":
+          description: PPTX file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /datasets/{id}/query:
+    post:
+      operationId: runQuery
+      tags: [analysis]
+      summary: Run a filter/group-by query on the dataset
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DataQuery"
+      responses:
+        "200":
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QueryResult"
+
+  /datasets/summary:
+    get:
+      operationId: getDatasetsSummary
+      tags: [datasets]
+      summary: Dashboard summary — total rows, cols, datasets, last uploaded
+      responses:
+        "200":
+          description: Summary stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DatasetsSummary"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    Dataset:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        originalName:
+          type: string
+        rowCount:
+          type: integer
+        columnCount:
+          type: integer
+        fileSizeBytes:
+          type: integer
+        fileType:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+        columns:
+          type: array
+          items:
+            type: string
+      required:
+        - id
+        - name
+        - originalName
+        - rowCount
+        - columnCount
+        - fileSizeBytes
+        - fileType
+        - uploadedAt
+        - columns
+
+    DatasetDetail:
+      type: object
+      properties:
+        dataset:
+          $ref: "#/components/schemas/Dataset"
+        previewRows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        columnTypes:
+          type: object
+          additionalProperties:
+            type: string
+        nullCounts:
+          type: object
+          additionalProperties:
+            type: integer
+        memorySizeMb:
+          type: number
+      required:
+        - dataset
+        - previewRows
+        - columnTypes
+        - nullCounts
+        - memorySizeMb
+
+    DatasetUpload:
+      type: object
+      properties:
+        file:
+          type: string
+          format: binary
+        name:
+          type: ["string", "null"]
+      required:
+        - file
+
+    DatasetsSummary:
+      type: object
+      properties:
+        totalDatasets:
+          type: integer
+        totalRows:
+          type: integer
+        totalColumns:
+          type: integer
+        lastUploadedAt:
+          type: ["string", "null"]
+        recentDatasets:
+          type: array
+          items:
+            $ref: "#/components/schemas/Dataset"
+      required:
+        - totalDatasets
+        - totalRows
+        - totalColumns
+        - lastUploadedAt
+        - recentDatasets
+
+    EdaResult:
+      type: object
+      properties:
+        datasetId:
+          type: string
+        shape:
+          type: object
+          properties:
+            rows:
+              type: integer
+            cols:
+              type: integer
+          required: [rows, cols]
+        numericColumns:
+          type: array
+          items:
+            $ref: "#/components/schemas/NumericStats"
+        categoricalColumns:
+          type: array
+          items:
+            $ref: "#/components/schemas/CategoricalStats"
+        missingValues:
+          type: array
+          items:
+            $ref: "#/components/schemas/MissingValueStats"
+        duplicateRows:
+          type: integer
+        memoryUsageMb:
+          type: number
+      required:
+        - datasetId
+        - shape
+        - numericColumns
+        - categoricalColumns
+        - missingValues
+        - duplicateRows
+        - memoryUsageMb
+
+    NumericStats:
+      type: object
+      properties:
+        column:
+          type: string
+        mean:
+          type: number
+        median:
+          type: number
+        std:
+          type: number
+        min:
+          type: number
+        max:
+          type: number
+        q25:
+          type: number
+        q75:
+          type: number
+        skewness:
+          type: number
+        kurtosis:
+          type: number
+        nullCount:
+          type: integer
+        histogram:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistogramBin"
+      required:
+        - column
+        - mean
+        - median
+        - std
+        - min
+        - max
+        - q25
+        - q75
+        - skewness
+        - kurtosis
+        - nullCount
+        - histogram
+
+    HistogramBin:
+      type: object
+      properties:
+        rangeStart:
+          type: number
+        rangeEnd:
+          type: number
+        count:
+          type: integer
+        label:
+          type: string
+      required:
+        - rangeStart
+        - rangeEnd
+        - count
+        - label
+
+    CategoricalStats:
+      type: object
+      properties:
+        column:
+          type: string
+        uniqueCount:
+          type: integer
+        nullCount:
+          type: integer
+        topValues:
+          type: array
+          items:
+            $ref: "#/components/schemas/ValueCount"
+        entropy:
+          type: number
+      required:
+        - column
+        - uniqueCount
+        - nullCount
+        - topValues
+        - entropy
+
+    ValueCount:
+      type: object
+      properties:
+        value:
+          type: string
+        count:
+          type: integer
+        pct:
+          type: number
+      required:
+        - value
+        - count
+        - pct
+
+    MissingValueStats:
+      type: object
+      properties:
+        column:
+          type: string
+        count:
+          type: integer
+        pct:
+          type: number
+      required:
+        - column
+        - count
+        - pct
+
+    ColumnAnalysis:
+      type: object
+      properties:
+        column:
+          type: string
+        dtype:
+          type: string
+        nullCount:
+          type: integer
+        nullPct:
+          type: number
+        uniqueCount:
+          type: integer
+        sampleValues:
+          type: array
+          items:
+            type: string
+        numericStats:
+          $ref: "#/components/schemas/NumericStats"
+        categoricalStats:
+          $ref: "#/components/schemas/CategoricalStats"
+        distributionData:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      required:
+        - column
+        - dtype
+        - nullCount
+        - nullPct
+        - uniqueCount
+        - sampleValues
+
+    CorrelationResult:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            type: string
+        matrix:
+          type: array
+          items:
+            type: array
+            items:
+              type: number
+        pairs:
+          type: array
+          items:
+            $ref: "#/components/schemas/CorrelationPair"
+      required:
+        - columns
+        - matrix
+        - pairs
+
+    CorrelationPair:
+      type: object
+      properties:
+        col1:
+          type: string
+        col2:
+          type: string
+        value:
+          type: number
+        strength:
+          type: string
+      required:
+        - col1
+        - col2
+        - value
+        - strength
+
+    OutlierResult:
+      type: object
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: "#/components/schemas/ColumnOutliers"
+        totalOutlierRows:
+          type: integer
+      required:
+        - columns
+        - totalOutlierRows
+
+    ColumnOutliers:
+      type: object
+      properties:
+        column:
+          type: string
+        method:
+          type: string
+        count:
+          type: integer
+        pct:
+          type: number
+        lowerBound:
+          type: number
+        upperBound:
+          type: number
+      required:
+        - column
+        - method
+        - count
+        - pct
+        - lowerBound
+        - upperBound
+
+    AiSnapshotRequest:
+      type: object
+      properties:
+        focus:
+          type: ["string", "null"]
+        depth:
+          type: string
+          enum: [brief, standard, exhaustive]
+      required: []
+
+    AiSnapshot:
+      type: object
+      properties:
+        executiveSummary:
+          type: string
+        keyFindings:
+          type: array
+          items:
+            type: string
+        dataQualityScore:
+          type: number
+        dataQualityIssues:
+          type: array
+          items:
+            type: string
+        patternInsights:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatternInsight"
+        recommendations:
+          type: array
+          items:
+            type: string
+        unusualFindings:
+          type: array
+          items:
+            type: string
+        businessImplications:
+          type: string
+        suggestedAnalyses:
+          type: array
+          items:
+            type: string
+      required:
+        - executiveSummary
+        - keyFindings
+        - dataQualityScore
+        - dataQualityIssues
+        - patternInsights
+        - recommendations
+        - unusualFindings
+        - businessImplications
+        - suggestedAnalyses
+
+    PatternInsight:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        severity:
+          type: string
+          enum: [info, warning, critical]
+        affectedColumns:
+          type: array
+          items:
+            type: string
+      required:
+        - title
+        - description
+        - severity
+        - affectedColumns
+
+    ExportOptions:
+      type: object
+      properties:
+        title:
+          type: ["string", "null"]
+        includeAi:
+          type: boolean
+        includeCharts:
+          type: boolean
+        includeRawStats:
+          type: boolean
+        sections:
+          type: array
+          items:
+            type: string
+
+    ExportResult:
+      type: object
+      properties:
+        format:
+          type: string
+        content:
+          type: string
+        filename:
+          type: string
+        generatedAt:
+          type: string
+      required:
+        - format
+        - content
+        - filename
+        - generatedAt
+
+    DataQuery:
+      type: object
+      properties:
+        filters:
+          type: array
+          items:
+            $ref: "#/components/schemas/QueryFilter"
+        groupBy:
+          type: ["string", "null"]
+        aggregation:
+          type: ["string", "null"]
+          enum: [count, sum, mean, min, max, null]
+        aggColumn:
+          type: ["string", "null"]
+        limit:
+          type: integer
+        sortBy:
+          type: ["string", "null"]
+        sortDir:
+          type: string
+          enum: [asc, desc]
+      required: []
+
+    QueryFilter:
+      type: object
+      properties:
+        column:
+          type: string
+        operator:
+          type: string
+          enum: [eq, neq, gt, gte, lt, lte, contains, not_contains, is_null, not_null]
+        value:
+          type: ["string", "null"]
+      required:
+        - column
+        - operator
+
+    QueryResult:
+      type: object
+      properties:
+        rows:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+        totalCount:
+          type: integer
+        columns:
+          type: array
+          items:
+            type: string
+        executionTimeMs:
+          type: integer
+      required:
+        - rows
+        - totalCount
+        - columns
+        - executionTimeMs
