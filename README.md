@@ -1,130 +1,162 @@
-# DataCanvas — Analytics Platform
+# DataCanvas — System Design Case Study
 
-A one-stop data analytics workbench. Upload a CSV or Excel file and get instant
-full exploratory data analysis (EDA), column-wise deep dives, correlation
-matrices, outlier detection, rule-based AI insights, and export to
-PPTX/Markdown — all without switching tools.
+A full-stack analytics platform: upload a CSV/XLSX, get back statistical
+EDA, correlation analysis, outlier detection, and an AI-generated executive
+summary — architected for concurrent load and a flaky third-party AI
+dependency, not just a happy-path demo.
 
-## Stack
+**Stack:** TypeScript · React · Express · PostgreSQL (Drizzle ORM) · Piscina
+(worker threads) · Opossum (circuit breaker) · OpenAPI + Orval codegen ·
+pnpm monorepo (8 workspace packages)
 
-- **Monorepo:** pnpm workspaces, Node.js 24, TypeScript 5.9
-- **Frontend:** React 19 + Vite + Tailwind CSS + Recharts + Framer Motion
-- **API:** Express 5 + Multer (file upload)
-- **Database:** PostgreSQL + Drizzle ORM (stores dataset metadata only)
-- **EDA engine:** pure TypeScript (papaparse + xlsx) — no Python dependency
-- **AI Snapshot:** deterministic rule-based statistical engine — no external LLM API needed
-- **Export:** pptxgenjs (PPTX), Markdown report generator
-- **Validation:** Zod, drizzle-zod
-- **API codegen:** Orval, generating typed hooks + Zod schemas from an OpenAPI spec
+---
 
-## Prerequisites
+## Problem Statement
 
-- Node.js 24+
-- [pnpm](https://pnpm.io/) (`corepack enable` will give you the right version automatically)
-- A PostgreSQL database (local, Docker, or a hosted instance like Neon/Supabase/RDS)
+Analysts and data scientists routinely need to go from a raw file to a
+usable set of statistics and insights, and the naive version of that tool
+— parse on request, compute on request, call an LLM on request — breaks
+down under three real conditions:
 
-## Getting started
+1. **CPU-bound work is heavy.** Full EDA (per-column stats, correlation
+   matrix, IQR outlier scan) on a large file is real, synchronous CPU time.
+2. **The AI layer is a third-party dependency you don't control.** It can
+   be slow, rate-limited, or down, and a request-response API design
+   inherits that unreliability directly.
+3. **Concurrency is the default, not the exception.** Multiple users (or
+   one user with multiple open tabs) will legitimately request the same
+   not-yet-computed resource at the same time.
 
-```bash
-git clone <this-repo-url>
-cd datacanvas
-pnpm install
+The goal was a system that stays fast and correct under all three, not
+just on a single-user local demo.
+
+---
+
+## System Overview & Architecture
+
+```mermaid
+flowchart TB
+    subgraph Client["React SPA (Vite)"]
+        UI[Dashboard / EDA / AI Snapshot pages]
+    end
+
+    subgraph API["Express API Server"]
+        Routes[Routes layer]
+        Cache["TieredCache\n(L1 in-memory LRU + L2 disk)"]
+        Jobs["AI Snapshot job table\n(single-flight)"]
+        Breaker["Circuit breaker + retry\n(Opossum)"]
+    end
+
+    subgraph Workers["Piscina worker-thread pool\n(cores − 1 threads)"]
+        Parse[parseFile]
+        EDA[runFullEda]
+        Corr[computeCorrelationMatrix]
+        Out[detectOutliers]
+    end
+
+    DB[(PostgreSQL\nvia Drizzle ORM)]
+    Grok[[Grok LLM API]]
+
+    UI -- "REST (OpenAPI-typed client)" --> Routes
+    Routes --> Cache
+    Routes -- "offload CPU work" --> Workers
+    Routes --> DB
+    Routes --> Jobs
+    Jobs --> Breaker
+    Breaker -- "retry + backoff" --> Grok
+    Breaker -- "fallback on failure/open" --> Routes
+    Cache -. "L2 write-through" .-> Disk[(Disk JSON)]
 ```
 
-Set the required environment variable(s) — most deploy platforms (Vercel, Render, Railway, Docker, etc.) let you set these in their dashboard/config directly. For **local development**, this project does not auto-load a `.env` file (there's no `dotenv` dependency wired in), so export them in your shell:
+**Key architectural choices:**
+- **Contract-first API.** One OpenAPI spec is the source of truth; Orval
+  codegen produces both the server-side Zod validators and the typed React
+  Query client, so the 8 packages in the monorepo can't drift out of sync.
+- **Compute isolation.** All CPU-bound work runs in a bounded worker-thread
+  pool, never on the thread handling HTTP connections.
+- **Async-first for anything with external latency.** The one route that
+  calls a third-party API (AI Snapshot) is designed as a background job
+  with client-side polling, not a long-held HTTP request.
 
-```bash
-export DATABASE_URL=postgres://user:password@localhost:5432/datacanvas
-```
+---
 
-`.env.example` at the repo root documents every variable the app reads — copy it to `.env` for reference, or use a tool like [`direnv`](https://direnv.net/) or `dotenv-cli` if you'd rather have it loaded automatically.
+## Screenshots
 
-Push the database schema:
+*(Add these once captured — recommended shots below)*
 
-```bash
-pnpm --filter @workspace/db run push
-```
+| Screenshot | What it should show |
+|---|---|
+| `dashboard.png` | Upload flow + dataset list |
+| `eda-explorer.png` | Numeric/categorical column stats, histograms |
+| `correlation-matrix.png` | Correlation heatmap |
+| `ai-snapshot.png` | AI Snapshot page with the Grok/rule-based source badge visible |
+| `ai-snapshot-processing.png` | The "processing" state mid-poll, to show the async job UX |
 
-Run the app in two terminals:
+## Demo
 
-```bash
-# Terminal 1 — API server (defaults to port 8080)
-pnpm --filter @workspace/api-server run dev
+*(Add a live deployment link and/or a 30–60s screen recording here — a
+Loom or GIF showing: upload → EDA populates → AI Snapshot goes from
+"processing" to a completed result with the source badge visible is the
+single most effective demo, since it makes the async-job design visible
+rather than just described.)*
 
-# Terminal 2 — Frontend (defaults to port 5173)
-pnpm --filter @workspace/datacanvas run dev
-```
+---
 
-Open `http://localhost:5173`.
+## Key Decisions & Tradeoffs
 
-### Environment variables
+| Decision | Alternative considered | Why this choice |
+|---|---|---|
+| Async job + polling for AI Snapshot | Hold the HTTP request open until the LLM responds | A held request has no recovery path if the connection drops mid-wait; polling makes the in-progress state a first-class, resumable thing a client can reconnect to |
+| In-process job table + LRU/disk cache | Redis from day one | Single-instance deployment doesn't need distributed state yet; both are built behind small interfaces (`TieredCache`, the jobs map) specifically so the swap to Redis/S3 is localized, not a rewrite |
+| Bounded worker-thread pool (Piscina) | Spawn a fresh worker per request, or run inline | A persistent pool amortizes thread-startup cost across requests while still capping total CPU parallelism at cores − 1, so the pool itself can't starve the event loop |
+| Circuit breaker + 1 retry, not unlimited retries | Retry until success | Unlimited retries on a sustained outage just relocates the latency problem; a breaker that opens after repeated failures and self-heals via a half-open trial keeps failure cost bounded and constant |
+| 200 + status field, not 202 Accepted, for the job endpoint | True REST 202 semantics | Keeps the OpenAPI-generated client's return type single-shaped — the polling logic only branches on the JSON body, not on HTTP status, which is simpler to generate and consume correctly |
+| Rate limit only upload + AI Snapshot | Blanket rate limiting on all routes | Those two are the only routes with real per-request cost (disk I/O + worker CPU; a billed external API call) — limiting cheap DB-lookup routes would add overhead for no actual protection |
 
-| Variable            | Where             | Required | Default                              | Purpose                                                 |
-| ------------------- | ----------------- | -------- | ------------------------------------- | -------------------------------------------------------- |
-| `DATABASE_URL`      | api-server, db     | Yes      | —                                      | Postgres connection string                              |
-| `PORT`              | api-server         | No       | `8080`                                | Port the Express API listens on                         |
-| `PORT`              | frontend (Vite)    | No       | `5173`                                | Port the Vite dev server listens on                      |
-| `BASE_PATH`         | frontend (Vite)    | No       | `/`                                    | Base path to serve the app under (for subpath deploys)  |
-| `API_PROXY_TARGET`  | frontend (Vite)    | No       | `http://localhost:${API_PORT\|8080}`   | Where `/api` requests are proxied to in dev              |
+---
 
-## Available scripts
+## Why It Matters
 
-- `pnpm run typecheck` — full typecheck across all packages
-- `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec (run after editing `lib/api-spec/openapi.yaml`)
-- `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- `pnpm --filter @workspace/db run push-force` — same, but force through destructive changes
+- **User-facing latency:** AI Snapshot's initial response time dropped from
+  as much as **~25,000ms** (worst case, blocking on the LLM call) to a
+  measured **74ms** to acknowledge the request and hand back a job to poll.
+- **Failure cost is bounded, not open-ended:** with a deliberately invalid
+  API key, the retry-then-fallback path completed in a measured **912ms**
+  — the user gets a usable rule-based result in under a second instead of
+  waiting out a ~19–25s timeout on every single request during an outage.
+- **No duplicate external API spend:** firing 3 concurrent requests at the
+  same not-yet-computed dataset resulted in exactly **1** LLM call, not 3 —
+  single-flight coalescing turns an O(concurrent users) cost into O(1) per
+  resource.
+- **Response payload shrank from O(n) to O(1)** for the summary endpoint by
+  moving aggregation into a SQL `SUM`/`COUNT` instead of fetching every row
+  into Node to reduce over — this matters more every row the dataset table
+  grows.
+- **Compression** on the EDA/correlation JSON responses (which are exactly
+  the repetitive shape gzip handles well) typically cuts payload size by
+  roughly 70–85% for this kind of data — worth confirming with a real
+  before/after measurement on your actual dataset sizes if you want an
+  exact number for an interview.
 
-## Project structure
+---
 
-```
-artifacts/
-  datacanvas/        # React + Vite frontend
-  api-server/         # Express API
-lib/
-  api-spec/           # OpenAPI contract (source of truth)
-  api-zod/             # Generated Zod schemas from the spec
-  api-client-react/   # Generated React Query hooks from the spec
-  db/                 # Drizzle schema + Postgres client
-scripts/               # One-off / maintenance scripts
-```
+## What I'd Improve Next
 
-Key files:
-
-- `lib/api-spec/openapi.yaml` — API contract (source of truth)
-- `lib/db/src/schema/datasets.ts` — DB schema (metadata only; raw data is cached as JSON on disk)
-- `artifacts/api-server/src/lib/eda-engine.ts` — EDA, correlation, outlier, and AI snapshot logic
-- `artifacts/api-server/src/lib/report-generator.ts` — Markdown report generator
-- `artifacts/api-server/src/routes/datasets.ts` — dataset/EDA/export route handlers
-- `artifacts/api-server/uploads/` — uploaded files (gitignored)
-- `artifacts/api-server/cache/` — per-dataset parsed data and EDA results, cached as JSON (gitignored)
-
-## Architecture notes
-
-- Raw file data is stored on disk, not in the DB — the DB holds only metadata, and parsed JSON is cached per dataset for fast re-analysis without re-parsing.
-- The EDA engine is 100% TypeScript, no Python/pandas dependency, and runs in-process with Express for low latency.
-- AI Snapshot uses a deterministic rule-based engine rather than an LLM API — no external API key or network dependency required.
-- File uploads use Multer with a 50MB limit; CSV parsing via papaparse (streaming-safe), Excel via the `xlsx` library.
-- PPTX export uses `pptxgenjs` server-side to produce a real `.pptx` binary with styled slides.
-
-## Features
-
-- Upload CSV or Excel → instant dataset card on the dashboard
-- Dataset detail view → full metadata header with status chips (rows × cols, size, type)
-- EDA Explorer → numeric + categorical stats, histograms, missing-value charts
-- Column Deep Dive → single-column stats + distribution chart
-- Correlation Matrix → interactive color-coded heatmap + sorted pair list
-- Outlier Detection → IQR-based per-column outlier counts
-- AI Snapshot → executive summary, data quality score, severity-rated insights, recommendations
-- Query Builder → filter + group-by + aggregation with live results
-- Export Center → download a PPTX presentation or Markdown report
-
-## Known limitations
-
-- The `/export/pdf` route currently produces a `.pptx` file (named for API simplicity) — there is no PDF export path yet.
-- The file cache in `artifacts/api-server/cache/` is not cleared on server restart; delete it manually if you suspect stale data.
-- After any OpenAPI spec change, run the `api-spec` codegen command before touching route or frontend code, and run `pnpm run typecheck:libs` after any `lib/*` change before checking the leaf packages.
-
-## License
-
-MIT
+- **Real load testing.** Everything above is verified correct and measured
+  for individual requests; I haven't yet run a proper concurrent-load
+  benchmark (e.g. `autocannon`/`k6`) to get p50/p95/p99 numbers under, say,
+  50 concurrent users. That's the natural next artifact — it would turn
+  "designed for concurrency" into a number I could put on a slide.
+- **Move shared state to Redis** once this needs more than one instance —
+  the job table and cache are already interface-shaped for it.
+- **Push the query builder into a real queryable engine** (DuckDB per
+  dataset, most likely) instead of filtering/aggregating cached rows in JS
+  — the natural ceiling of the current approach as dataset sizes grow.
+- **Observability.** Structured logs exist (pino); no metrics/tracing yet.
+  Adding request-duration histograms and a dashboard (even just
+  Prometheus + Grafana locally) would make the latency claims above
+  self-verifying instead of manually curl-timed.
+- **WebSocket/SSE instead of polling** for the AI Snapshot job status, once
+  there's a reason polling's ~1.2s latency floor actually matters.
+- **Object storage (S3) for uploaded files** instead of local disk, as the
+  actual prerequisite for running more than one api-server instance.
