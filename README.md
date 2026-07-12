@@ -55,7 +55,7 @@ flowchart TB
     end
 
     DB[(PostgreSQL\nvia Drizzle ORM)]
-    Grok[[Grok LLM API]]
+    Gemini[[Gemini LLM API]]
 
     UI -- "REST (OpenAPI-typed client)" --> Routes
     Routes --> Cache
@@ -63,7 +63,7 @@ flowchart TB
     Routes --> DB
     Routes --> Jobs
     Jobs --> Breaker
-    Breaker -- "retry + backoff" --> Grok
+    Breaker -- "retry + backoff" --> Gemini
     Breaker -- "fallback on failure/open" --> Routes
     Cache -. "L2 write-through" .-> Disk[(Disk JSON)]
 ```
