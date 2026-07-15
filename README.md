@@ -10,6 +10,8 @@ dependency, not just a happy-path demo.
 pnpm monorepo (8 workspace packages)
 
 ---
+## 📺 Project Demo
+https://res.cloudinary.com/ovqlquj4/video/upload/vc_auto/DataCanvas_wioeds.mp4
 
 ## Problem Statement
 
