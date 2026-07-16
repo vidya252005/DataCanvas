@@ -15,22 +15,22 @@ https://res.cloudinary.com/ovqlquj4/video/upload/vc_auto/DataCanvas_wioeds.mp4
 
 ## Problem Statement
 
-Analysts and data scientists routinely need to go from a raw file to a
-usable set of statistics and insights, and the naive version of that tool
-— parse on request, compute on request, call an LLM on request — breaks
-down under three real conditions:
+In an organization, analysts and data scientists often have to transform a raw file into a
+A set of statistics and information that can be used relatively easily, and the naive version of such a tool.
+— Parse on Request — Compute on Request — Call LLM on Request — breaks
+The conditions were simulated in three real cases:
 
-1. **CPU-bound work is heavy.** Full EDA (per-column stats, correlation
-   matrix, IQR outlier scan) on a large file is real, synchronous CPU time.
-2. **The AI layer is a third-party dependency you don't control.** It can
-   be slow, rate-limited, or down, and a request-response API design
-   inherits that unreliability directly.
-3. **Concurrency is the default, not the exception.** Multiple users (or
-   one user with multiple open tabs) will legitimately request the same
-   not-yet-computed resource at the same time.
+1. CPU-bound work is heavy. Full EDA (per-column stats, correlation
+   The matrix, IQR outlier scan) is a real synchronous CPU time on a large file.
+2. Third party dependency called AI layer, which you have no control over. It can
+   Be slow, rate-limited, or down, and a request-response API design
+   Passes on that unreliability.
+A single user) can simultaneously access and modify a file.
+   one user (with several open tabs) will lawfully request the same
+   At the same time, a not-yet-computed resource.
 
-The goal was a system that stays fast and correct under all three, not
-just on a single-user local demo.
+The aim was to maintain the system at a consistent speed and correctness under all three,
+Just on a local, one user demo.
 
 ---
 
@@ -70,15 +70,13 @@ flowchart TB
     Cache -. "L2 write-through" .-> Disk[(Disk JSON)]
 ```
 
-**Key architectural choices:**
-- **Contract-first API.** One OpenAPI spec is the source of truth; Orval
-  codegen produces both the server-side Zod validators and the typed React
-  Query client, so the 8 packages in the monorepo can't drift out of sync.
-- **Compute isolation.** All CPU-bound work runs in a bounded worker-thread
-  pool, never on the thread handling HTTP connections.
-- **Async-first for anything with external latency.** The one route that
-  calls a third-party API (AI Snapshot) is designed as a background job
-  with client-side polling, not a long-held HTTP request.
+## Key architectural choices:
+- Contract-first API: A single OpenAPI spec is the source of truth; Orval
+  codegen will generate both the Zod validators on the server side and the typed React client.
+  Ask the client, so the 8 packages in the monorepo don't get out-of-sync.
+- Compute isolation: All CPU intensive tasks are executed in a bounded worker-thread.
+  Don't use the pool on the thread handling the HTTP connections.
+For external latencies, Async-first. The one route that third-party API (AI Snapshot) is a call that is intended to run as a background operation not a long-polling HTTP request, with client-side polling.
 
 ---
 
